@@ -12,22 +12,22 @@
 //
 // # Basic content
 //
-// ParsePDF reads a file and returns Texts and Graphics grouped by page. Use
-// PDF.Details to access the detailed result already produced by that parse.
+// ParsePDF interprets only text and graphics and returns them grouped by page,
+// retaining neither the input snapshot nor a detailed result. Use it when a
+// caller only needs everyday text and path content.
 //
 // # Detailed content
 //
 // Open and Read return a DetailedPDF containing page geometry, text glyphs,
 // graphics, images, fonts, annotations, content operations, and source spans.
-// BuildPDF interprets a Document obtained through the low-level input API.
 //
-// # Low-level inspection
+// # Selective content
 //
-// ParseFile and Parse create a Document with bounded input and decoding limits.
-// Document methods resolve objects, decode streams, and read original or
-// decoded byte ranges. Lex and ParseObject inspect independent syntax ranges.
-// Dictionary methods, Int, Number, and IsStream inspect direct object values.
-// Matrix methods provide coordinate transformation and composition.
+// Extract and ExtractReader return an Extraction grouped by page, generating
+// only selected content. Content flags combine text, graphics, images, and
+// annotations; Positions, Styles, Glyphs, and Provenance select details.
+// Without Provenance, the returned extraction retains neither a Document nor
+// a DetailedPDF.
 //
 // # Ownership and interpretation limits
 //
@@ -36,8 +36,9 @@
 // with Provenance. This is not streaming I/O or an exact process-memory bound.
 // No Close call is needed. Treat results as read-only. Lazy Document methods
 // are not safe for concurrent calls.
-// Basic parsing also retains detailed analysis and is not a low-memory mode.
-// Always check returned errors, including when a partial result is non-nil.
+// Basic parsing interprets only the requested text and graphics, but it is
+// not a low-memory mode for detailed work. Always check returned errors,
+// including when a partial result is non-nil.
 // Unsupported effects may instead be reported in result diagnostics. Selective
 // extraction does not validate skipped resources or unrequested interpretation.
 // Coordinates use unrotated PDF user space, and content order is drawing order,

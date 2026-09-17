@@ -7,16 +7,18 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/MyungSub0519/gopd"
 )
 
 func TestPDFParseReturnsBasicObject(t *testing.T) {
 	path := filepath.Join("..", "..", "testdata", "synthetic.pdf")
-	doc, err := pdfparse(path)
+	doc, err := gopd.ParsePDF(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Texts) != 2 || len(doc.Graphics) != 2 || doc.Details() == nil {
-		t.Fatal("pdfparse did not return classified basic content")
+	if len(doc.Texts) != 2 || len(doc.Graphics) != 2 {
+		t.Fatal("ParsePDF did not return classified basic content")
 	}
 	wantTexts := []int{2, 2}
 	wantGraphics := []int{2, 1}
@@ -31,7 +33,7 @@ func TestPDFParseReturnsBasicObject(t *testing.T) {
 }
 
 func TestPDFParsePropagatesFileError(t *testing.T) {
-	doc, err := pdfparse(filepath.Join(t.TempDir(), "missing.pdf"))
+	doc, err := gopd.ParsePDF(filepath.Join(t.TempDir(), "missing.pdf"))
 	if doc != nil || !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("result=%v error=%v", doc, err)
 	}

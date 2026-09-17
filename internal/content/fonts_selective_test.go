@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -78,7 +78,7 @@ func TestExtractPositionsSkipsEmbeddedFontStream(t *testing.T) {
 	if !text.Position.Complete || text.Glyphs[1].Origin != (Point{X: 5}) || text.Glyphs[1].Advance != (Point{X: 5}) {
 		t.Fatalf("MissingWidth was not used for glyph positions: %+v", text.Glyphs)
 	}
-	if _, err := Read(bytes.NewReader(data), int64(len(data))); err == nil {
+	if _, err := readAllErr(bytes.NewReader(data), int64(len(data))); err == nil {
 		t.Fatal("legacy detailed parsing must keep resolving the embedded font")
 	}
 }

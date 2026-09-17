@@ -1,4 +1,4 @@
-package gopd
+package content
 
 type Color struct {
 	Space      Name

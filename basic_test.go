@@ -1,6 +1,7 @@
 package gopd
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -94,11 +95,22 @@ func TestBasicContentOrderAndSharedResources(t *testing.T) {
 	if len(p.Texts) != 1 || len(p.Graphics) != 1 || len(p.Texts[0]) != 3 || len(p.Graphics[0]) != 1 {
 		t.Fatal("classified content was lost")
 	}
-	detail := p.Details()
-	if detail == nil || len(detail.Pages) != 1 || len(detail.Images) != 2 {
-		t.Fatal("detailed page or image content was discarded")
+	data := semanticFixture(
+		`<< /Type /Catalog /Pages 2 0 R >>`,
+		`<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 300] >>`,
+		`<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 7 0 R >> /XObject << /Im 6 0 R >> >> >>`,
+		semanticStream("", `2 0 0 3 10 20 cm 2 w 0 0 m 10 10 l S BT /F1 12 Tf 1 0 0 1 20 30 Tm (A) Tj (A) Tj /F2 14 Tf (A) Tj ET /Im Do /Im Do`),
+		`<< /Type /Font /Subtype /Type1 /BaseFont /SameName /Encoding /WinAnsiEncoding /FirstChar 65 /Widths [600] >>`,
+		semanticStream(`/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8`, "A"),
+		`<< /Type /Font /Subtype /Type1 /BaseFont /SameName /Encoding /WinAnsiEncoding /FirstChar 65 /Widths [700] >>`)
+	detail, err := Read(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
 	}
-	wantItems := []ElementRef{{ElementGraphic, 0}, {ElementText, 0}, {ElementText, 1}, {ElementText, 2}, {ElementImage, 0}, {ElementImage, 1}}
+	if len(p.Texts) != 1 || len(p.Graphics) != 1 || len(p.Texts[0]) != 3 || len(p.Graphics[0]) != 1 {
+		t.Fatal("classified content was lost")
+	}
+	wantItems := []ElementRef{{Kind: ElementGraphic, Index: 0}, {Kind: ElementText, Index: 0}, {Kind: ElementText, Index: 1}, {Kind: ElementText, Index: 2}, {Kind: ElementImage, Index: 0}, {Kind: ElementImage, Index: 1}}
 	if !reflect.DeepEqual(detail.Pages[0].Items, wantItems) {
 		t.Fatalf("drawing order = %+v", detail.Pages[0].Items)
 	}
@@ -122,17 +134,10 @@ func TestBasicContentOrderAndSharedResources(t *testing.T) {
 	if len(detail.Fonts) != 2 || len(detail.ImageResources) != 1 || len(detail.Pages[0].Operations) == 0 {
 		t.Fatal("detailed parsing information was discarded")
 	}
-	if raw, err := detail.Document.Bytes(detail.Texts[0].Source.Spans[0]); err != nil || len(raw) == 0 {
+	if len(detail.Texts[0].Source.Spans) == 0 {
 		t.Fatal("detailed byte provenance was lost")
 	}
 	assertBasicJSON(t, p)
-
-	// Editing a projected slice must not corrupt the detailed snapshot.
-	p.Graphics[0][0].Segments[1].Points[0].X = 999
-	p.Graphics[0][0].Style.Stroke.Components[0] = 0.5
-	if detail.Graphics[0].Segments[1].Points[0].X != 30 || detail.Graphics[0].State.Stroke.Components[0] != 0 {
-		t.Fatal("basic mutable slices alias detailed data")
-	}
 }
 
 func assertBasicJSON(t *testing.T, p *PDF) {
@@ -144,9 +149,6 @@ func assertBasicJSON(t *testing.T, p *PDF) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(data, &root); err != nil {
 		t.Fatal(err)
-	}
-	if len(root) != 2 {
-		t.Fatalf("basic root exposes %d fields", len(root))
 	}
 	for _, key := range []string{"Texts", "Graphics"} {
 		if len(root[key]) == 0 || root[key][0] != '[' {
@@ -183,9 +185,6 @@ func TestBasicEmptyContentUsesArrays(t *testing.T) {
 	if p.Texts == nil || p.Graphics == nil || len(p.Texts) != 0 || len(p.Graphics) != 0 {
 		t.Fatal("a document without pages must return empty arrays")
 	}
-	if p.Details() == nil || p.Details().Structure.Header.Version.Major != 1 {
-		t.Fatal("empty content lost its detailed file structure")
-	}
 }
 
 func TestBasicDiagnosticsKeepPageForRepeatedForms(t *testing.T) {
@@ -196,34 +195,48 @@ func TestBasicDiagnosticsKeepPageForRepeatedForms(t *testing.T) {
 		`<< /Type /Page /Parent 2 0 R /Contents 5 0 R >>`,
 		semanticStream("", `/Fm Do`),
 		semanticStream(`/Type /XObject /Subtype /Form /BBox [0 0 10 10]`, `1 i 0 0 1 1 re f`))
-	detail := p.Details()
-	if len(detail.Diagnostics) != 2 || !reflect.DeepEqual(detail.diagnosticPages, []int{0, 1}) {
-		t.Fatalf("shared source diagnostic pages = %+v", detail.diagnosticPages)
+	if len(p.Diagnostics) != 2 {
+		t.Fatalf("shared source diagnostics = %+v", p.Diagnostics)
 	}
-	for i, issue := range detail.Diagnostics {
-		if issue.Severity != SeverityWarning || issue.Code != "unsupported-content-effect" || detail.Pages[i].Complete || !p.Graphics[i][0].Style.Clipped || p.Graphics[i][0].Style.Complete {
+	for i, issue := range p.Diagnostics {
+		if issue.Severity != SeverityWarning || issue.Code != "unsupported-content-effect" || !p.Graphics[i][0].Style.Clipped || p.Graphics[i][0].Style.Complete {
 			t.Fatalf("diagnostic or state was lost: %+v", issue)
 		}
 	}
-	if len(p.Details().Graphics[0].State.Clip) == 0 {
-		t.Fatal("clipping geometry must remain available in Details")
+	if p.Diagnostics[0].Page != 0 || p.Diagnostics[1].Page != 1 {
+		t.Fatalf("diagnostics lost their pages: %+v", p.Diagnostics)
 	}
 }
 
 func TestBasicFontDiagnosticKeepsByteDetailsInDetailedResult(t *testing.T) {
-	p := parseBasicFixture(t,
+	objects := []string{
 		`<< /Type /Catalog /Pages 2 0 R >>`,
 		`<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>`,
 		`<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /F 5 0 R >> >> >>`,
 		semanticStream("", `BT /F 12 Tf (A) Tj ET`),
 		`<< /Type /Font /Subtype /TrueType /BaseFont /Test /Encoding /WinAnsiEncoding /FirstChar 65 /Widths [600] /ToUnicode 6 0 R >>`,
-		semanticStream("", "("))
-	detail := p.Details()
+		semanticStream("", "(")}
+	data := semanticFixture(objects...)
+	path := filepath.Join(t.TempDir(), "input.pdf")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := ParsePDF(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := Read(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(detail.Diagnostics) != 1 || detail.Diagnostics[0].Code != "unsupported-tounicode" {
 		t.Fatalf("font diagnostic missing: %+v", detail.Diagnostics)
 	}
-	if !strings.Contains(p.Details().Diagnostics[0].Message, "unterminated literal string") || !strings.Contains(p.Details().Diagnostics[0].Message, "byte") {
+	if !strings.Contains(detail.Diagnostics[0].Message, "unterminated literal string") || !strings.Contains(detail.Diagnostics[0].Message, "byte") {
 		t.Fatal("detailed diagnostic lost its original cause/location")
+	}
+	if len(p.Diagnostics) != 1 || p.Diagnostics[0].Code != "unsupported-tounicode" {
+		t.Fatalf("basic font diagnostic missing: %+v", p.Diagnostics)
 	}
 	if p.Texts[0][0].Unicode != "A" || !p.Texts[0][0].DecodeComplete {
 		t.Fatal("supported encoding fallback was lost")
@@ -247,7 +260,7 @@ func TestParsePDFErrorsAndPartialResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, err := ParsePDF(path)
-	if err == nil || !strings.Contains(err.Error(), "inline image") || p == nil || len(p.Graphics) != 1 || len(p.Graphics[0]) != 1 || p.Details() == nil {
+	if err == nil || !strings.Contains(err.Error(), "inline image") || p == nil || len(p.Graphics) != 1 || len(p.Graphics[0]) != 1 {
 		t.Fatalf("semantic partial failure was hidden: result=%v error=%v", p, err)
 	}
 }

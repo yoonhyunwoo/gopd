@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -64,7 +64,7 @@ func TestExtractReviewLexicalErrorKeepsPartialOutput(t *testing.T) {
 	if err == nil || got == nil || len(got.Pages) != 1 || len(got.Pages[0].Graphics) != 1 || got.Pages[0].Complete {
 		t.Fatalf("expected graphic before lexical error: result=%+v err=%v", got, err)
 	}
-	legacy, err := Read(bytes.NewReader(data), int64(len(data)))
+	legacy, err := readAllErr(bytes.NewReader(data), int64(len(data)))
 	if err == nil || legacy == nil || len(legacy.Graphics) != 0 {
 		t.Fatalf("legacy full-lex behavior changed: result=%+v err=%v", legacy, err)
 	}

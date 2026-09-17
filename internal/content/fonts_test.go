@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -33,7 +33,7 @@ func TestFontBoundsRepeatedCIDWidthExpansion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BuildPDF(doc); err == nil {
+	if _, err := BuildPDFEngine(doc, nil); err == nil {
 		t.Fatal("repeated CID-width ranges bypassed the expansion budget")
 	}
 }

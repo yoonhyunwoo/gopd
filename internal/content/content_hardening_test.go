@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -20,26 +20,26 @@ func TestContentCompoundOperandAcrossStreams(t *testing.T) {
 		t.Fatalf("split TJ = %+v", p.Texts)
 	}
 	operand := p.Pages[0].Operations[2].Operands[0]
-	raw, err := p.Document.Bytes(operand.Span)
+	raw, err := p.document.Bytes(operand.Span)
 	if err != nil || string(raw) != "[(A) 100 (A)]" {
 		t.Fatalf("split operand bytes = %q, err=%v", raw, err)
 	}
-	source := p.Document.Sources[operand.Span.Source]
+	source := p.document.Sources[operand.Span.Source]
 	if source.Origin == nil || len(source.Origin.Inputs) != 2 || source.Origin.Input != (Span{}) {
 		t.Fatalf("joined source provenance = %+v", source.Origin)
 	}
 	var reconstructed []byte
 	for _, input := range source.Origin.Inputs {
-		part, err := p.Document.Bytes(input)
+		part, err := p.document.Bytes(input)
 		if err != nil {
 			t.Fatal(err)
 		}
 		reconstructed = append(reconstructed, part...)
-		if input.Source == source.ID || p.Document.Sources[input.Source].Origin == nil {
+		if input.Source == source.ID || p.document.Sources[input.Source].Origin == nil {
 			t.Fatal("joined inputs must identify original decoded streams")
 		}
 	}
-	joined, err := p.Document.Bytes(Span{Source: source.ID, End: source.Size})
+	joined, err := p.document.Bytes(Span{Source: source.ID, End: source.Size})
 	if err != nil || !bytes.Equal(joined, reconstructed) {
 		t.Fatalf("joined bytes differ from exact input concatenation: %v", err)
 	}
@@ -50,8 +50,8 @@ func TestContentSingleStreamRetainsDecodedSource(t *testing.T) {
 		`<< /Type /Catalog /Pages 2 0 R >>`,
 		`<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>`,
 		`<< /Type /Page /Parent 2 0 R /Contents [4 0 R] >>`, semanticStream("", `0 0 1 1 re f`))
-	source := p.Document.Sources[p.Pages[0].Operations[0].Span.Source]
-	if source.Origin == nil || len(source.Origin.Inputs) != 0 || source.Origin.Input.Source != p.Structure.File {
+	source := p.document.Sources[p.Pages[0].Operations[0].Span.Source]
+	if source.Origin == nil || len(source.Origin.Inputs) != 0 || source.Origin.Input.Source != SourceID(1) {
 		t.Fatalf("single stream was unnecessarily joined: %+v", source.Origin)
 	}
 }
@@ -68,7 +68,7 @@ func TestContentCumulativeByteBudget(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = BuildPDF(d)
+			_, err = BuildPDFEngine(d, nil)
 			if repeats == 2 && err != nil {
 				t.Fatalf("exact byte budget must pass: %v", err)
 			}
@@ -91,7 +91,7 @@ func TestContentByteBudgetIncludesForms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BuildPDF(d); !errors.Is(err, ErrLimit) || !strings.Contains(err.Error(), "cumulative content byte limit") {
+	if _, err := BuildPDFEngine(d, nil); !errors.Is(err, ErrLimit) || !strings.Contains(err.Error(), "cumulative content byte limit") {
 		t.Fatalf("Form bytes must be charged for every invocation: %v", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestContentValueBudgetIncludesRepeatedOperands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := BuildPDF(d)
+	p, err := BuildPDFEngine(d, nil)
 	if err == nil || !strings.Contains(err.Error(), "value count limit") || len(p.Pages[0].Operations) != 16 {
 		t.Fatalf("cumulative content values: operations=%d err=%v", len(p.Pages[0].Operations), err)
 	}
@@ -124,7 +124,7 @@ func TestContentBoundsRepeatedWhitespaceStreams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BuildPDF(d); !errors.Is(err, ErrLimit) || !strings.Contains(err.Error(), "semantic object limit") {
+	if _, err := BuildPDFEngine(d, nil); !errors.Is(err, ErrLimit) || !strings.Contains(err.Error(), "semantic object limit") {
 		t.Fatalf("repeated stream visit limit = %v", err)
 	}
 }
@@ -139,7 +139,7 @@ func TestContentBoundsAnnotationOccurrences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := BuildPDF(d)
+	p, err := BuildPDFEngine(d, nil)
 	if !errors.Is(err, ErrLimit) || !strings.Contains(err.Error(), "semantic object limit") || len(p.Annotations) > 20 {
 		t.Fatalf("annotation limit: annotations=%d err=%v", len(p.Annotations), err)
 	}
@@ -160,7 +160,7 @@ func TestContentSemanticBudgetIsCumulativeAcrossPages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p, err := BuildPDF(d)
+		p, err := BuildPDFEngine(d, nil)
 		if budget == 6 && (!errors.Is(err, ErrLimit) || len(p.Annotations) != 3) {
 			t.Fatalf("excess annotation: count=%d, err=%v", len(p.Annotations), err)
 		}

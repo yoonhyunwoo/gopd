@@ -1,6 +1,8 @@
 package gopd
 
 import (
+	"github.com/MyungSub0519/gopd/internal/content"
+
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -34,14 +36,14 @@ func TestExtractSelections(t *testing.T) {
 				for _, text := range page.Texts {
 					want := full.Texts[nt]
 					if text.Unicode != want.Unicode || text.Position == nil || text.Position.Matrix != want.Matrix ||
-						text.Position.FontSize != want.FontSize || !reflect.DeepEqual(*text.Style, basicStyle(want.State)) {
+						text.Position.FontSize != want.FontSize || !reflect.DeepEqual(*text.Style, content.BasicStyle(want.State)) {
 						t.Fatalf("text %d mismatch: %+v", nt, text)
 					}
 					nt++
 				}
 				for _, graphic := range page.Graphics {
 					want := full.Graphics[ng]
-					if graphic.Paint != want.Paint || len(graphic.Segments) != len(want.Segments) || !reflect.DeepEqual(*graphic.Style, basicStyle(want.State)) {
+					if graphic.Paint != want.Paint || len(graphic.Segments) != len(want.Segments) || !reflect.DeepEqual(*graphic.Style, content.BasicStyle(want.State)) {
 						t.Fatalf("graphic %d mismatch", ng)
 					}
 					for i, segment := range graphic.Segments {

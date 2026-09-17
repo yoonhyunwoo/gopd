@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -21,7 +21,11 @@ func TestFontDifferencesIndirectItems(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := fontFixture(`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Differences `+tc.differences+` >> >>`, `BT /F 10 Tf (AC) Tj ET`, tc.extras...)
-			pdf, err := Read(bytes.NewReader(data), int64(len(data)))
+			pdfDoc, err := Parse(bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pdf, err := BuildPDFEngine(pdfDoc, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -33,7 +37,7 @@ func TestFontDifferencesIndirectItems(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			raw, err := pdf.Document.Bytes(differences.Span)
+			raw, err := pdf.document.Bytes(differences.Span)
 			if err != nil || string(raw) != tc.differences {
 				t.Fatalf("preserved Differences = %q, %v; want %q", raw, err, tc.differences)
 			}
@@ -61,7 +65,7 @@ func TestFontDifferencesIndirectErrors(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := fontFixture(`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Differences `+tc.differences+` >> >>`, `BT /F 10 Tf (A) Tj ET`, tc.extras...)
-			_, err := Read(bytes.NewReader(data), int64(len(data)))
+			_, err := readAllErr(bytes.NewReader(data), int64(len(data)))
 			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
 				t.Fatalf("error = %v, want %q", err, tc.wantError)
 			}
@@ -97,7 +101,11 @@ func TestFontImplicitStandardEncodingExactNames(t *testing.T) {
 	} {
 		t.Run(tc.baseFont, func(t *testing.T) {
 			data := fontFixture(fmt.Sprintf(`<< /Type /Font /Subtype /Type1 /BaseFont /%s >>`, tc.baseFont), `BT /F 10 Tf <412760> Tj ET`)
-			pdf, err := Read(bytes.NewReader(data), int64(len(data)))
+			pdfDoc, err := Parse(bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pdf, err := BuildPDFEngine(pdfDoc, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

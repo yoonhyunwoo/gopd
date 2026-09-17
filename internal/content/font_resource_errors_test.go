@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -23,7 +23,7 @@ func TestFontWidthBudgetReturnsErrLimit(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := BuildPDF(d); !errors.Is(err, ErrLimit) {
+			if _, err := BuildPDFEngine(d, nil); !errors.Is(err, ErrLimit) {
 				t.Fatalf("font width budget must return ErrLimit: %v", err)
 			}
 		})
@@ -54,7 +54,7 @@ func TestFontDecodedTextBudgetReturnsErrLimit(t *testing.T) {
 func TestFontInvalidCIDRangeIsNotResourceLimit(t *testing.T) {
 	for _, widths := range []string{`[65535 [500 500]]`, `[0 65536 500]`} {
 		data := fontFixture(`<< /Type /Font /Subtype /Type0 /Encoding /Identity-H /DescendantFonts [6 0 R] >>`, `BT /F 10 Tf ET`, `<< /Subtype /CIDFontType2 /W `+widths+` >>`)
-		if _, err := Read(bytes.NewReader(data), int64(len(data))); err == nil || errors.Is(err, ErrLimit) {
+		if _, err := readAllErr(bytes.NewReader(data), int64(len(data))); err == nil || errors.Is(err, ErrLimit) {
 			t.Fatalf("invalid CID range is a format error: %v", err)
 		}
 	}

@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -36,7 +36,11 @@ func TestExtractSplitContentsAndClipping(t *testing.T) {
 		semanticStream("", `(A)] TJ ET Q BT /F 12 Tf (A) Tj ET`),
 		`<< /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 65 /Widths [600] >>`,
 	)
-	full, err := Read(bytes.NewReader(data), int64(len(data)))
+	fullDoc, err := Parse(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := BuildPDFEngine(fullDoc, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +49,7 @@ func TestExtractSplitContentsAndClipping(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, text := range got.Pages[0].Texts {
-		if !reflect.DeepEqual(text.Glyphs, full.Texts[i].Glyphs) || !reflect.DeepEqual(*text.Style, basicStyle(full.Texts[i].State)) {
+		if !reflect.DeepEqual(text.Glyphs, full.Texts[i].Glyphs) || !reflect.DeepEqual(*text.Style, BasicStyle(full.Texts[i].State)) {
 			t.Fatal("cross-stream state changed")
 		}
 		for _, span := range text.Source.Spans {
@@ -99,7 +103,7 @@ func TestExtractAnnotationsOnly(t *testing.T) {
 }
 
 func TestExtractImageSource(t *testing.T) {
-	got, err := Extract("testdata/synthetic.pdf", ExtractOptions{Content: ContentImages, Provenance: true})
+	got, err := Extract("../../testdata/synthetic.pdf", ExtractOptions{Content: ContentImages, Provenance: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -20,7 +20,11 @@ func fontFixture(font, content string, extras ...string) []byte {
 
 func TestFontDifferencesImplicitBase(t *testing.T) {
 	data := fontFixture(`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Differences [65 /B] >> >>`, "BT /F 10 Tf (AC'`) Tj ET")
-	pdf, err := Read(bytes.NewReader(data), int64(len(data)))
+	pdfDoc, err := Parse(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdf, err := BuildPDFEngine(pdfDoc, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +40,7 @@ func TestFontCMapExpansionBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = BuildPDF(doc); !errors.Is(err, errCMapLimit) {
+	if _, err = BuildPDFEngine(doc, nil); !errors.Is(err, errCMapLimit) {
 		t.Fatalf("expanded mapping byte limit = %v", err)
 	}
 }
@@ -48,7 +52,7 @@ func TestFontCMapEntryBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BuildPDF(doc); !errors.Is(err, errCMapLimit) {
+	if _, err := BuildPDFEngine(doc, nil); !errors.Is(err, errCMapLimit) {
 		t.Fatalf("expanded mapping entry limit = %v", err)
 	}
 }
@@ -60,7 +64,7 @@ func TestFontToUnicodeStreamLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BuildPDF(doc); !errors.Is(err, ErrLimit) {
+	if _, err := BuildPDFEngine(doc, nil); !errors.Is(err, ErrLimit) {
 		t.Fatalf("ToUnicode stream limit = %v", err)
 	}
 }
@@ -68,7 +72,11 @@ func TestFontToUnicodeStreamLimit(t *testing.T) {
 func TestFontCIDIndirectWidths(t *testing.T) {
 	data := fontFixture(`<< /Type /Font /Subtype /Type0 /BaseFont /Test /Encoding /Identity-H /DescendantFonts [6 0 R] >>`, `BT /F 10 Tf <000100020003> Tj ET`,
 		`<< /Type /Font /Subtype /CIDFontType2 /W [7 0 R 8 0 R 10 0 R 11 0 R 9 0 R] >>`, `1`, `[9 0 R]`, `500`, `2`, `3`)
-	pdf, err := Read(bytes.NewReader(data), int64(len(data)))
+	pdfDoc, err := Parse(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdf, err := BuildPDFEngine(pdfDoc, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +170,7 @@ func TestFontCMapSharedBudget(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pdf, err := BuildPDF(doc)
+			pdf, err := BuildPDFEngine(doc, nil)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("error = %v, want error %v", err, tc.wantError)
 			}

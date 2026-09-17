@@ -15,7 +15,7 @@ func BenchmarkExtract(b *testing.B) {
 			for b.Loop() {
 				var err error
 				if mode == "legacy" {
-					_, err = ParsePDF("testdata/synthetic.pdf")
+					_, err = Open("testdata/synthetic.pdf")
 				} else {
 					options := ExtractOptions{}
 					if mode == "all" {
@@ -45,7 +45,7 @@ func BenchmarkExtractDense(b *testing.B) {
 				reader := bytes.NewReader(data)
 				if mode == "legacy" {
 					detail, err := Read(reader, int64(len(data)))
-					return basicPDF(detail), err
+					return detail, err
 				}
 				options := ExtractOptions{}
 				if mode == "all" {

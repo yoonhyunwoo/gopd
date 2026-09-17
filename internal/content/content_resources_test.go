@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -31,7 +31,7 @@ func TestExtGStateRepeatedEntriesConsumeSemanticBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pdf, err := BuildPDF(doc)
+	pdf, err := BuildPDFEngine(doc, nil)
 	if !errors.Is(err, ErrLimit) {
 		t.Fatalf("repeated resource entries must exhaust semantic work: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestXObjectRepeatedDictionaryWorkConsumesSemanticBudget(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				pdf, err := BuildPDF(doc)
+				pdf, err := BuildPDFEngine(doc, nil)
 				if limit == 300 {
 					if !errors.Is(err, ErrLimit) {
 						t.Fatalf("repeated XObject dictionary scans must exhaust semantic work: %v", err)
@@ -93,7 +93,7 @@ func TestExtGStateDashExpansionConsumesValueBudget(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		pdf, err := BuildPDF(doc)
+		pdf, err := BuildPDFEngine(doc, nil)
 		if !errors.Is(err, ErrLimit) {
 			t.Fatalf("repeated dash output must exhaust value budget: %v", err)
 		}
@@ -112,7 +112,7 @@ func TestExtGStateValueBudgetBoundary(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		pdf, err := BuildPDF(doc)
+		pdf, err := BuildPDFEngine(doc, nil)
 		if limit == 66 && (!errors.Is(err, ErrLimit) || len(pdf.Graphics) != 0) {
 			t.Fatalf("over-budget style retained: graphics=%d err=%v", len(pdf.Graphics), err)
 		}
@@ -136,7 +136,7 @@ func TestContentDiagnosticsConsumeBudget(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		pdf, err := BuildPDF(doc)
+		pdf, err := BuildPDFEngine(doc, nil)
 		if !errors.Is(err, ErrLimit) || pdf == nil || len(pdf.Diagnostics) != 0 || len(pdf.Pages[0].Operations) != 1 {
 			t.Fatalf("diagnostic must be charged before retention: pdf=%+v err=%v", pdf, err)
 		}
@@ -151,7 +151,11 @@ func TestExtGStateResolvesNestedValues(t *testing.T) {
 		`q /G gs 0 0 1 1 re S BT (A) Tj ET Q 0 0 1 1 re S`,
 		`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /FirstChar 65 /Widths [600] >>`,
 		`10`, `[12 0 R 2]`, `3`, `4`, `/RelativeColorimetric`, `1`)
-	pdf, err := Read(bytes.NewReader(data), int64(len(data)))
+	d, err := Parse(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdf, err := BuildPDFEngine(d, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +172,7 @@ func TestExtGStateResolvesNestedValues(t *testing.T) {
 	if restored := pdf.Graphics[1].State; len(restored.Dash) != 0 || restored.LineWidth != 1 {
 		t.Fatalf("q/Q must restore the earlier state: %+v", restored)
 	}
-	loaded, err := pdf.Document.Load(ObjectID{Number: 5})
+	loaded, err := pdf.document.Load(ObjectID{Number: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +190,11 @@ func TestExtGStateNullEntriesDoNotChangeState(t *testing.T) {
 	data := graphicsStateFixture(
 		`<< /LW null /D 6 0 R /Font null /RI null /CA null /ca null /BM null /SMask null /Unknown null >>`,
 		`2 w [1 2] 3 d /G gs 0 0 1 1 re S`, `null`)
-	pdf, err := Read(bytes.NewReader(data), int64(len(data)))
+	d, err := Parse(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdf, err := BuildPDFEngine(d, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +212,11 @@ func TestExtGStateInvalidNestedValues(t *testing.T) {
 	} {
 		for _, value := range []string{`/Bad`, `6 0 R`} {
 			data := graphicsStateFixture(state, `/G gs`, value, `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`)
-			if _, err := Read(bytes.NewReader(data), int64(len(data))); err == nil || errors.Is(err, ErrLimit) {
+			d, err := Parse(bytes.NewReader(data), int64(len(data)))
+			if err == nil {
+				_, err = BuildPDFEngine(d, nil)
+			}
+			if err == nil || errors.Is(err, ErrLimit) {
 				t.Fatalf("malformed or cyclic resource must fail without masquerading as a limit: %v", err)
 			}
 		}

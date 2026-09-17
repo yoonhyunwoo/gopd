@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-package gopd
+package content
 
 import (
 	"bytes"
@@ -12,14 +12,14 @@ func semanticFixture(objects ...string) []byte {
 	return pdftest.File(objects, "")
 }
 
-func semanticStream(dict, content string) string {
-	return pdftest.Stream(dict, content)
-}
-
 func semanticRead(t *testing.T, objects ...string) *DetailedPDF {
 	t.Helper()
 	data := semanticFixture(objects...)
-	p, err := Read(bytes.NewReader(data), int64(len(data)))
+	d, err := Parse(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := BuildPDFEngine(d, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestContentMixedOrderUnicodeAndRepeatedImage(t *testing.T) {
 	if p.Graphics[0].State.LineWidth != 2 || p.Pages[0].MediaBox.Max.Y != 300 {
 		t.Fatal("graphics state or inherited MediaBox lost")
 	}
-	if p.Texts[0].Source.Spans[0].Source == p.Structure.File {
+	if p.Texts[0].Source.Spans[0].Source == p.structure.File {
 		t.Fatal("text provenance must point into decoded content")
 	}
 }
@@ -76,7 +76,7 @@ func TestContentFormsReuseAndCycle(t *testing.T) {
 	}
 	objects[4] = semanticStream(`/Type /XObject /Subtype /Form /BBox [0 0 1 1] /Resources << /XObject << /Fm 5 0 R >> >>`, `/Fm Do`)
 	data := semanticFixture(objects...)
-	_, err := Read(bytes.NewReader(data), int64(len(data)))
+	_, err := readAllErr(bytes.NewReader(data), int64(len(data)))
 	if err == nil || !strings.Contains(err.Error(), "cycle") {
 		t.Fatalf("cycle error = %v", err)
 	}
@@ -103,7 +103,7 @@ func TestContentHonorsGlyphAndOperandDepthLimits(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = BuildPDF(d); err == nil || !strings.Contains(err.Error(), "limit") {
+		if _, err = BuildPDFEngine(d, nil); err == nil || !strings.Contains(err.Error(), "limit") {
 			t.Fatalf("resource limit not enforced for %q: %v", content, err)
 		}
 	}
@@ -115,14 +115,14 @@ func TestContentBoundsRepeatedEmptyPageTreeNodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = BuildPDF(d); err == nil || !strings.Contains(err.Error(), "limit") {
+	if _, err = BuildPDFEngine(d, nil); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("tree visit limit = %v", err)
 	}
 }
 
 func TestContentRejectsDuplicateGraphicsStateEntries(t *testing.T) {
 	data := semanticFixture(`<< /Type /Catalog /Pages 2 0 R >>`, `<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>`, `<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /ExtGState << /GS << /LW 1 /LW 2 >> >> >> >>`, semanticStream("", `/GS gs`))
-	if _, err := Read(bytes.NewReader(data), int64(len(data))); err == nil || !strings.Contains(err.Error(), "duplicate") {
+	if _, err := readAllErr(bytes.NewReader(data), int64(len(data))); err == nil || !strings.Contains(err.Error(), "duplicate") {
 		t.Fatalf("duplicate graphics state = %v", err)
 	}
 }
@@ -142,7 +142,7 @@ func TestContentBoundsExpandedFontMaps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = BuildPDF(d); err == nil || !strings.Contains(err.Error(), "limit") {
+	if _, err = BuildPDFEngine(d, nil); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("CMap entry budget = %v", err)
 	}
 }
@@ -153,7 +153,7 @@ func TestContentBoundsExpandedUnicodeText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = BuildPDF(d); err == nil || !strings.Contains(err.Error(), "limit") {
+	if _, err = BuildPDFEngine(d, nil); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("expanded Unicode budget = %v", err)
 	}
 }
@@ -177,7 +177,7 @@ func TestContentRejectsNonFiniteDerivedGeometry(t *testing.T) {
 				semanticStream("", test.content),
 				`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 65 /Widths [600] >>`,
 				semanticStream(`/Type /XObject /Subtype /Form /BBox [0 0 1 1] /Matrix [`+huge+` 0 0 1 0 0]`, test.form))
-			if _, err := Read(bytes.NewReader(data), int64(len(data))); err == nil {
+			if _, err := readAllErr(bytes.NewReader(data), int64(len(data))); err == nil {
 				t.Fatal("accepted derived coordinates containing infinity or NaN")
 			}
 		})
@@ -196,7 +196,7 @@ func TestContentBoundsCumulativeClipSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BuildPDF(doc); err == nil || !strings.Contains(err.Error(), "limit") {
+	if _, err := BuildPDFEngine(doc, nil); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("cumulative clip snapshot budget not enforced: %v", err)
 	}
 }

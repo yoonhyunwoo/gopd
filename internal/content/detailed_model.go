@@ -1,4 +1,4 @@
-package gopd
+package content
 
 // DetailedPDF is a semantic snapshot. Slices and the underlying Document are read-only
 // by convention. Elements follow content execution order, not reading order.
@@ -10,10 +10,10 @@ type DetailedPDF struct {
 	ImageResources  []ImageResource
 	Fonts           []Font
 	Annotations     []Annotation
-	Structure       *Structure
-	Document        *Document
-	Diagnostics     []Diagnostic
-	diagnosticPages []int // emission context, including reused Form streams
+	document        *Document // source access for provenance-style inspection
+	structure       *Structure
+	Diagnostics     []Diagnostic // interpretation diagnostics; includes file-structure diagnostics
+	diagnosticPages []int        // emission context, including reused Form streams
 }
 
 type ElementKind uint8

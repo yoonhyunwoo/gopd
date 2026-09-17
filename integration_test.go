@@ -33,9 +33,8 @@ func TestSyntheticPDFClassificationAndProvenance(t *testing.T) {
 			t.Fatal("text lost source provenance")
 		}
 		for _, span := range text.Source.Spans {
-			raw, e := doc.Document.Bytes(span)
-			if e != nil || len(raw) == 0 {
-				t.Fatalf("invalid text source span: %+v %v", span, e)
+			if span.Source == SourceID(1) {
+				t.Fatalf("text must come from decoded content, not the file source: %+v", span)
 			}
 		}
 	}
@@ -43,7 +42,7 @@ func TestSyntheticPDFClassificationAndProvenance(t *testing.T) {
 	if !slices.Equal(texts, want) {
 		t.Fatalf("text order = %q, want %q", texts, want)
 	}
-	if len(doc.Fonts) != 1 || len(doc.Diagnostics) != 0 || len(doc.Structure.Diagnostics) != 0 {
+	if len(doc.Fonts) != 1 || len(doc.Diagnostics) != 0 {
 		t.Fatal("synthetic fixture must use one shared font without diagnostics")
 	}
 	if doc.Images[0].Resource != doc.Images[1].Resource {
@@ -53,11 +52,18 @@ func TestSyntheticPDFClassificationAndProvenance(t *testing.T) {
 	if resource.Width != 2 || resource.Height != 2 || resource.BitsPerComponent != 8 {
 		t.Fatal("unexpected synthetic image dimensions")
 	}
-	source, err := doc.Document.DecodeStream(resource.Stream)
+	ext, err := Extract(path, ExtractOptions{Content: ContentImages, Provenance: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	pixels, err := doc.Document.Bytes(Span{Source: source.ID, End: source.Size})
+	if ext.Document == nil {
+		t.Fatal("provenance extraction must retain document access")
+	}
+	streamSource, err := ext.Document.DecodeStream(resource.Stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pixels, err := ext.Document.Bytes(Span{Source: streamSource.ID, End: streamSource.Size})
 	if err != nil || !bytes.Equal(pixels, []byte{255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255}) {
 		t.Fatalf("synthetic RGB pixels = %x, error = %v", pixels, err)
 	}
@@ -99,16 +105,6 @@ func TestSyntheticPDFClassificationAndProvenance(t *testing.T) {
 	if counts[ElementText] != len(doc.Texts) || counts[ElementGraphic] != len(doc.Graphics) || counts[ElementImage] != len(doc.Images) {
 		t.Fatal("page order list omitted classified elements")
 	}
-	var end int64
-	for _, region := range doc.Structure.Regions {
-		if region.Span.Source != 1 || region.Span.Start != end || region.Span.End <= end {
-			t.Fatalf("overlapping/missing file region %+v", region)
-		}
-		end = region.Span.End
-	}
-	if end != int64(len(before)) {
-		t.Fatal("regions do not cover original file")
-	}
 	after, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatal("inspection changed the PDF fixture")
@@ -121,7 +117,7 @@ func TestBasicSyntheticPDF(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Texts) != 2 || len(p.Graphics) != 2 || len(p.Details().Images) != 2 || len(p.Details().Diagnostics) != 0 {
+	if len(p.Texts) != 2 || len(p.Graphics) != 2 || len(p.Diagnostics) != 0 {
 		t.Fatal("basic fixture classification changed")
 	}
 	wantTexts := []int{2, 2}
@@ -132,7 +128,7 @@ func TestBasicSyntheticPDF(t *testing.T) {
 			t.Fatalf("page %d content counts changed", page)
 		}
 		for i, text := range texts {
-			if text.Unicode != p.Details().Texts[detailIndex].Unicode || text.Page != page || text.Font == nil || text.Font != p.Texts[0][0].Font {
+			if text.Unicode == "" || text.Page != page || text.Font == nil || text.Font != p.Texts[0][0].Font {
 				t.Fatalf("page %d text %d content or shared font changed", page, i)
 			}
 			detailIndex++

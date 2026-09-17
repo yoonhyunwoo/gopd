@@ -30,11 +30,6 @@ type summary struct {
 	PageDetails    []pageSummary `json:"page_details"`
 }
 
-// pdfparse returns the basic PDF object. Detailed data is available via Details().
-func pdfparse(path string) (*gopd.PDF, error) {
-	return gopd.ParsePDF(path)
-}
-
 func run(args []string, out, stderr io.Writer) int {
 	flags := flag.NewFlagSet("gopd", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -48,17 +43,12 @@ func run(args []string, out, stderr io.Writer) int {
 		flags.Usage()
 		return 2
 	}
-	doc, err := pdfparse(flags.Arg(0))
-	if err != nil {
-		fmt.Fprintln(stderr, "gopd:", err)
-		return 1
-	}
-	detail := doc.Details()
-	diagnostics := len(detail.Diagnostics)
-	if detail.Structure != nil {
-		diagnostics += len(detail.Structure.Diagnostics)
-	}
 	if *textOnly {
+		doc, err := gopd.ParsePDF(flags.Arg(0))
+		if err != nil {
+			fmt.Fprintln(stderr, "gopd:", err)
+			return 1
+		}
 		for i, texts := range doc.Texts {
 			if i > 0 {
 				fmt.Fprintln(out, "\f")
@@ -67,12 +57,22 @@ func run(args []string, out, stderr io.Writer) int {
 				fmt.Fprintln(out, text.Unicode)
 			}
 		}
-		if diagnostics > 0 {
-			fmt.Fprintf(stderr, "gopd: %d diagnostic(s); inspect PDF.Details() for extraction limits\n", diagnostics)
+		if len(doc.Diagnostics) > 0 {
+			fmt.Fprintf(stderr, "gopd: %d diagnostic(s); extraction limits may apply\n", len(doc.Diagnostics))
 		}
 		return 0
 	}
-	s := summary{Pages: len(detail.Pages), Texts: len(detail.Texts), Graphics: len(detail.Graphics), Images: len(detail.Images), ImageResources: len(detail.ImageResources), Fonts: len(detail.Fonts), Annotations: len(detail.Annotations), Diagnostics: diagnostics}
+	detail, err := gopd.Open(flags.Arg(0))
+	if err != nil {
+		fmt.Fprintln(stderr, "gopd:", err)
+		return 1
+	}
+	basic, err := gopd.ParsePDF(flags.Arg(0))
+	if err != nil {
+		fmt.Fprintln(stderr, "gopd:", err)
+		return 1
+	}
+	s := summary{Pages: len(detail.Pages), Texts: len(detail.Texts), Graphics: len(detail.Graphics), Images: len(detail.Images), ImageResources: len(detail.ImageResources), Fonts: len(detail.Fonts), Annotations: len(detail.Annotations), Diagnostics: len(detail.Diagnostics)}
 	images := make([]int, len(detail.Pages))
 	for _, image := range detail.Images {
 		images[image.Source.Page]++
@@ -81,8 +81,8 @@ func run(args []string, out, stderr io.Writer) int {
 		s.PageDetails = append(s.PageDetails, pageSummary{
 			Page:     i + 1,
 			Complete: page.Complete,
-			Texts:    len(doc.Texts[i]),
-			Graphics: len(doc.Graphics[i]),
+			Texts:    len(basic.Texts[i]),
+			Graphics: len(basic.Graphics[i]),
 			Images:   images[i],
 		})
 	}
