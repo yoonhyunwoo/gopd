@@ -207,7 +207,7 @@ internal/document/   파일·바이트 범위·객체·xref·스트림 읽기
 internal/syntax/     토큰·객체 구문 해석
 internal/pdfmodel/   공통 모델·사전 조회·값 변환·좌표 계산
 internal/pdftest/    테스트용 PDF·스트림 생성기
-cmd/gopd/           CLI 인수 처리와 표시
+examples/gopd/      CLI 인수 처리와 표시
 ```
 
 공개 함수는 `api.go`, 별칭은 `types.go`에서 찾습니다. 기본 응답과 변환은 `basic.go`에서 함께 읽을 수 있습니다. 파일 읽기·구문 분석 구현은 내부 패키지에 두며, CLI는 라이브러리를 호출합니다. 패키지 경계, 타입 이동의 호환성 범위, 테스트 배치는 [프로젝트 구조](project-structure.md)를 참고하세요.
